@@ -23,6 +23,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 class ScreenshotRequest(BaseModel):
     screenshot: str
     score: int
@@ -31,23 +32,19 @@ class ScreenshotRequest(BaseModel):
     enemyPosition: float
 
 
-
-@app.get("/ping")
-async def ping():
-    return {"message": "pong"}
-
-
-
 @app.post("/upload-screenshot")
 def upload_file(request: ScreenshotRequest):
     (ENV_RECORD / "record1").write_text((request.model_dump_json()))
-    action_file = (ENV_RECORD / "action1")
+    action_file = ENV_RECORD / "action1"
     while not action_file.exists():
         sleep(0.01)
-    action = int(action_file.read_text())
-    return {"action": action}
+    action = action_file.read_text().strip()
+    if action == "":
+        return {"action": 1}
+    return {"action": int(action)}
 
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run("server:app", host="localhost", port=8000, reload=False)

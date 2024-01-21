@@ -1,11 +1,10 @@
-from stable_baselines3 import PPO
+from stable_baselines3 import A2C
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.vec_env import VecNormalize
 from stable_baselines3.common.env_util import make_vec_env
 
-# from PakuPakuEnv import PakuPakuEnv
-from PakuPakuEnv import PakuPakuEnv
+from PakuPakuEnv1 import PakuPakuEnv
 from pathlib import Path
 
 
@@ -33,41 +32,30 @@ class EvalCallback(BaseCallback):
 
 
 def train():
-    model_name = f"ppo"
+    model_name = f"a2c"
     TOTAL_TIMESTEPS = 100_000
     env = PakuPakuEnv
-    vec_env = make_vec_env(env, env_kwargs={"port": 8000})
-    ENT_COEF = 0.03
-    N_EPOCHS = 10
-    N_STEPS = 128
-    BATCH_SIZE = 128
+    vec_env = make_vec_env(env)
+    ENT_COEF = 0.2
 
     if Path(f"trained_models/{model_name}.zip").exists():
         reset_num_timesteps = False
-        model = PPO.load(
+        model = A2C.load(
             f"trained_models/{model_name}.zip",
             vec_env,
             print_system_info=True,
-            device="auto",
+            device="cpu",
             ent_coef=ENT_COEF,
-            n_epochs=N_EPOCHS,
-            n_steps=N_STEPS,
-            batch_size=BATCH_SIZE,
-            normalize_advantage=False,
             verbose=0,
         )
     else:
         reset_num_timesteps = True
-        model = PPO(
+        model = A2C(
             "CnnPolicy",
             vec_env,
             verbose=0,
-            n_steps=N_STEPS,
-            device="auto",
+            device="cpu",
             ent_coef=ENT_COEF,
-            n_epochs=N_EPOCHS,
-            batch_size=BATCH_SIZE,
-            normalize_advantage=False,
             tensorboard_log="tensorboard_log",
             policy_kwargs=dict(
                 net_arch=dict(pi=[1024, 2048, 1024], vf=[1024, 2048, 1024])
