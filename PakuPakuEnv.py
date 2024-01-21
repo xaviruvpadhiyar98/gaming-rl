@@ -79,9 +79,10 @@ class PakuPakuEnv(gym.Env):
             Path.home() / "Softwares/thorium-browser_117.0.5938.157_amd64/thorium"
         ).as_posix()
         # options.add_argument("--auto-open-devtools-for-tabs")
+        options.add_argument('--disable-dev-shm-usage')
+        options.add_argument("--headless")
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
         options.add_experimental_option("useAutomationExtension", False)
-        # options.add_argument("--headless")
         self.driver = Chrome(service=ChromeService(), options=options)
 
         # Fastapi
@@ -233,7 +234,7 @@ class PakuPakuEnv(gym.Env):
                 desc += "Enemy Away. "
 
         if len(self.action_tracker) > 10 and self.action_tracker[-5:] == "00000":
-            reward -= 0.3
+            reward -= 0.5
             self.player_switching += 1
             desc += "Player Keeps Switching. "
 
