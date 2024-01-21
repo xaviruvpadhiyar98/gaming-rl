@@ -3,7 +3,7 @@ import numpy as np
 from gymnasium.spaces import Box, Discrete
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
 from threading import Thread, Event
 from uvicorn import Config, Server
@@ -22,24 +22,44 @@ from time import sleep
 import logging
 from torch.utils.tensorboard import SummaryWriter
 import json
+from typing import Any, List
 
-formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
 logging.basicConfig(
-    format='%(asctime)s,%(msecs)03d %(levelname)-8s %(threadName)-11s [%(filename)s:%(lineno)d %(funcName)5s()] %(message)s',
-    datefmt='%H:%M:%S',
-    level=logging.INFO
+    format="%(asctime)s,%(msecs)03d %(levelname)-8s %(threadName)-11s [%(filename)s:%(lineno)d %(funcName)5s()] %(message)s",
+    datefmt="%H:%M:%S",
+    level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
 
+
+class GameObject(BaseModel):
+    x: float
+
+
+class Player(GameObject):
+    vx: float
+
+
+class Dot(GameObject):
+    isPower: bool
+
+
+# class Enemy(GameObject):
+#     eyeVx: float = Field(alias='vx')
+
+#     class Config:
+#         populate_by_name = True
 
 
 class ScreenshotRequest(BaseModel):
     screenshot: str
     score: int
+    player: Player
+    enemy: Player
     game_ended: bool
-    player_position: float
-    enemy_position: float
     power_ticks: float
+    dots: List[Dot]
 
 
 class PakuPakuEnv(gym.Env):
@@ -53,17 +73,16 @@ class PakuPakuEnv(gym.Env):
         )
         self.port = port
 
-        # Selenium 
+        # Selenium
         options = ChromeOptions()
         options.binary_location = (
             Path.home() / "Softwares/thorium-browser_117.0.5938.157_amd64/thorium"
-                ).as_posix()
+        ).as_posix()
         # options.add_argument("--auto-open-devtools-for-tabs")
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        options.add_experimental_option('useAutomationExtension', False)
+        options.add_experimental_option("useAutomationExtension", False)
         # options.add_argument("--headless")
         self.driver = Chrome(service=ChromeService(), options=options)
-
 
         # Fastapi
         self.app = FastAPI()
@@ -81,10 +100,14 @@ class PakuPakuEnv(gym.Env):
 
         # Uvicorn
         server_config = Config(
-            self.app, host="127.0.0.1", port=self.port, lifespan="on", loop="asyncio", log_level="warning"
+            self.app,
+            host="127.0.0.1",
+            port=self.port,
+            lifespan="on",
+            loop="asyncio",
+            log_level="warning",
         )
         self.server = Server(server_config)
-
 
         # Threading
         self.request_event = Event()
@@ -97,11 +120,10 @@ class PakuPakuEnv(gym.Env):
         self.action = None
         # self.logger = SummaryWriter("tensorboard_log/ppo_1")
 
-
-
     def get_data(self, request: ScreenshotRequest) -> JSONResponse:
         # logger.info("New Incoming Request")
         self.request = request
+        # logger.info(request)
         # logger.info(f"Got Request")
         self.request_event.set()
         # logger.info(f"{self.request_event.is_set()=}")
@@ -110,7 +132,7 @@ class PakuPakuEnv(gym.Env):
         # logger.info(f"{self.action_event.is_set()=}")
         content = {"action": self.action}
         # logger.info(f"action is {content=}")
-        
+
         self.request = None
         self.request_event.clear()
         # logger.info(f"{self.request_event.is_set()=}")
@@ -137,7 +159,7 @@ class PakuPakuEnv(gym.Env):
         self.reward_tracker = 0
         self.action_tracker = ""
         self.score_tracker = [request.score]
-        self.previous_player_position = request.player_position
+        self.previous_player_position = request.player.x
         self.counter = 0
         self.enemy_close_counter = 0
         self.enemy_away_counter = 0
@@ -147,10 +169,9 @@ class PakuPakuEnv(gym.Env):
         self.dots_eaten = 0
         self.eaten_enemy = 0
         self.player_switching = 0
-
+        self.did_not_thing = 0
 
         return obs, {}
-        
 
     def step(self, action):
         terminated = False
@@ -171,33 +192,38 @@ class PakuPakuEnv(gym.Env):
         obs = self.get_obs(request)
         # logger.info((request.player_position, request.enemy_position, request.score, request.game_ended))
 
-
-
         score_diff = request.score - self.previous_score
-        pos_diff = abs(request.player_position - request.enemy_position)
-
-
         if score_diff == 1:
-            reward += 0.3
+            reward += 0.5
             self.dots_eaten += 1
             desc += "Dot Eaten. "
-        
+
         if score_diff > 1:
             reward += 1
             self.eaten_enemy += 1
             desc += "Eaten Enemy. "
-        
+
+        pos_diff = abs(request.player.x - request.enemy.x)
+        moving_towards_enemy = (
+            request.player.vx > 0 and request.player.x < request.enemy.x
+        ) or (request.player.vx < 0 and request.player.x > request.enemy.x)
+
         if request.power_ticks > 0:
-            if pos_diff < 8:
+            reward += 0.7
+            self.power_up_enemy_away_counter += 1
+            desc += "PowerUp Reward. "
+
+            if moving_towards_enemy:
                 reward += 1
                 self.power_up_enemy_close_counter += 1
-                desc += "PowerUp Enemy Close. "
+                desc += "Moving Towards Enemy. "
             else:
-                reward += 0.01
+                reward -= 0.1
                 self.power_up_enemy_away_counter += 1
-                desc += "PowerUp Enemy Away. "
+                desc += "Moving Away from Enemy. "
+        
         else:
-            if pos_diff < 13:
+            if pos_diff < 13 and moving_towards_enemy:
                 reward -= 1
                 self.enemy_close_counter += 1
                 desc += "Enemy Close. "
@@ -206,10 +232,44 @@ class PakuPakuEnv(gym.Env):
                 self.enemy_away_counter += 1
                 desc += "Enemy Away. "
 
-        if len(self.action_tracker) > 10 and self.action_tracker[-5:] == '00000':
+        if len(self.action_tracker) > 10 and self.action_tracker[-5:] == "00000":
             reward -= 0.3
             self.player_switching += 1
-            desc += "Keeps Switching. "
+            desc += "Player Keeps Switching. "
+
+        if reward == 0:
+            self.did_not_thing += 1
+            desc += "Did nothing"
+
+        # if request.power_ticks > 0 and moving_towards_enemy:
+
+
+        # if request.power_ticks <= 0 and moving_towards_enemy:
+        #     reward += 1
+        #     self.power_up_enemy_close_counter += 1
+        #     desc += "PowerUp Enemy Close. "
+
+        # if request.power_ticks > 0:
+        #     if moving_towards_enemy:
+        #     # if pos_diff < 8:
+        #         # reward += 1
+        #         # self.power_up_enemy_close_counter += 1
+        #         # desc += "PowerUp Enemy Close. "
+        #     else:
+        #         # reward += 0.01
+        #         # self.power_up_enemy_away_counter += 1
+        #         # desc += "PowerUp Enemy Away. "
+        # else:
+        #     if moving_towards_enemy and pos_diff < 14:
+        #     # if pos_diff < 13:
+        #         reward -= 1
+        #         self.enemy_close_counter += 1
+        #         desc += "Enemy Close. "
+        #     else:
+        #         reward += 0.01
+        #         self.enemy_away_counter += 1
+        #         desc += "Enemy Away. "
+
 
 
         # if pos_diff < 15:
@@ -221,11 +281,6 @@ class PakuPakuEnv(gym.Env):
         #     reward += 0.05
         #     self.enemy_away_counter += 1
         #     desc += "Enemy Away. "
-
-
-
-
-
 
         # if len(self.score_tracker) > 200 and not request.game_ended:
         #     past_n_score = self.score_tracker[-100:]
@@ -239,7 +294,6 @@ class PakuPakuEnv(gym.Env):
         #         reward -= 1
         #         desc += " keeps switching leading to same position"
 
-        
         self.previous_score = request.score
         self.reward_tracker += reward
         self.action_tracker += str(action)
@@ -250,16 +304,17 @@ class PakuPakuEnv(gym.Env):
             "reward_tracker": self.reward_tracker,
             "score": request.score,
             "game_ended": request.game_ended,
-            "player_position": request.player_position,
-            "enemy_position": request.enemy_position,
+            "player_position": request.player.x,
+            "enemy_position": request.enemy.x,
             "counter": self.counter,
-            "dots_eaten":self.dots_eaten,
-            "eaten_enemy":self.eaten_enemy,
-            "enemy_close_counter":self.enemy_close_counter,
-            "enemy_away_counter":self.enemy_away_counter,
+            "dots_eaten": self.dots_eaten,
+            "eaten_enemy": self.eaten_enemy,
+            "enemy_close_counter": self.enemy_close_counter,
+            "enemy_away_counter": self.enemy_away_counter,
             "power_up_enemy_close_counter": self.power_up_enemy_close_counter,
             "power_up_enemy_away_counter": self.power_up_enemy_away_counter,
             "player_switching": self.player_switching,
+            "did_not_thing": self.did_not_thing,
             "desc": desc,
         }
         # print(info)
@@ -282,9 +337,7 @@ class PakuPakuEnv(gym.Env):
 
         reward = max(min(reward, 1), -1)
 
-        
         return obs, reward, terminated, done, info
-
 
     def close(self):
         # self.logger.close()
@@ -297,22 +350,24 @@ class PakuPakuEnv(gym.Env):
     def render(self):
         pass
 
+
 def main():
     env = PakuPakuEnv(port=8000)
     for _ in range(10):
         env.reset()
         for r in range(5000):
-            action = SystemRandom().choice(np.array([1,], dtype=np.int16))
+            # action = int(input("0 for change,1 for same path >> "))
+            action = SystemRandom().choice(np.array([0, 1], dtype=np.int16))
             observation, reward, terminated, done, info = env.step(action)
             if done or terminated:
                 break
-    
+
     sleep(10)
     env.close()
+
 
 if __name__ == "__main__":
     from time import sleep
     from random import SystemRandom
+
     main()
-
-
