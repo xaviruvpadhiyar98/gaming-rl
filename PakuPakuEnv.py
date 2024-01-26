@@ -68,6 +68,7 @@ class PakuPakuEnv(gym.Env):
     def __init__(self, port=9000):
         super(PakuPakuEnv, self).__init__()
         self.action_space = Discrete(2)
+        # self.action_space = Box(low=0, high=1, shape=(1,), dtype=np.float16)
         self.observation_space = Box(
             low=0, high=255, shape=(50, 100, 4), dtype=np.uint8
         )
@@ -157,8 +158,9 @@ class PakuPakuEnv(gym.Env):
         obs = self.get_obs(request)
 
         self.previous_score = request.score
+        self.previous_dots = request.dots
         self.reward_tracker = 0
-        self.action_tracker = ""
+        self.action_tracker = []
         self.score_tracker = [request.score]
         self.previous_player_position = request.player.x
         self.counter = 0
@@ -180,9 +182,12 @@ class PakuPakuEnv(gym.Env):
         reward = 0
         desc = ""
 
+        # action = np.round(action).astype(int).item()
         self.action = action.item()
+        # print(self.action)
         self.action_event.set()
         # logger.info(f"{self.action_event.is_set()=} {self.action=}")
+
 
         self.request = None
         self.request_event.clear()
@@ -194,53 +199,91 @@ class PakuPakuEnv(gym.Env):
         # logger.info((request.player_position, request.enemy_position, request.score, request.game_ended))
 
         score_diff = request.score - self.previous_score
-        if score_diff == 1:
-            reward += 0.5
-            self.dots_eaten += 1
-            desc += "Dot Eaten. "
+        # pos_diff = abs(request.player.x - request.enemy.x)
+        # moving_towards_enemy = (
+        #     request.player.vx > 0 and request.player.x < request.enemy.x
+        # ) or (request.player.vx < 0 and request.player.x > request.enemy.x)
 
-        if score_diff > 1:
+        if score_diff > 0:
             reward += 1
             self.eaten_enemy += 1
-            desc += "Eaten Enemy. "
+            desc += "Done Something. "
 
-        pos_diff = abs(request.player.x - request.enemy.x)
-        moving_towards_enemy = (
-            request.player.vx > 0 and request.player.x < request.enemy.x
-        ) or (request.player.vx < 0 and request.player.x > request.enemy.x)
-
-        if request.power_ticks > 0:
-            reward += 0.7
-            self.power_up_enemy_away_counter += 1
-            desc += "PowerUp Reward. "
-
-            if moving_towards_enemy:
-                reward += 1
-                self.power_up_enemy_close_counter += 1
-                desc += "Moving Towards Enemy. "
-            else:
-                reward -= 0.1
-                self.power_up_enemy_away_counter += 1
-                desc += "Moving Away from Enemy. "
-        
-        else:
-            if pos_diff < 13 and moving_towards_enemy:
-                reward -= 1
-                self.enemy_close_counter += 1
-                desc += "Enemy Close. "
-            else:
-                reward += 0.01
-                self.enemy_away_counter += 1
-                desc += "Enemy Away. "
-
-        if len(self.action_tracker) > 10 and self.action_tracker[-5:] == "00000":
+        if len(self.action_tracker) > 10 and self.action_tracker[-5:] == [0,0,0,0,0]:
             reward -= 0.5
             self.player_switching += 1
             desc += "Player Keeps Switching. "
+        
+        # if request.power_ticks > 0:
+        #     if moving_towards_enemy:
+        #         self.power_up_enemy_close_counter += 1
+        #     else:
+        #         self.power_up_enemy_away_counter += 1
+        # else:
+        #     if moving_towards_enemy:
+        #         if pos_diff < 14:
+        #             reward -= 1
+        #             self.enemy_close_counter += 1
+        #             desc += "Moving Towards Enemy. "
+        #     else:
+        #         pass
 
-        if reward == 0:
-            self.did_not_thing += 1
-            desc += "Did nothing"
+        # if len(self.action_tracker) > 10 and self.action_tracker[-5:] == "00000":
+        #     reward -= 0.5
+        #     self.player_switching += 1
+        #     desc += "Player Keeps Switching. "
+
+        # if reward == 0:
+        #     self.did_not_thing += 1
+        #     desc += "Did nothing"
+
+        # if score_diff == 1:
+        #     reward += 1
+        #     self.dots_eaten += 1
+        #     desc += "Dot Eaten. "
+
+        # if score_diff > 1:
+        #     reward += 1
+        #     self.eaten_enemy += 1
+        #     desc += "Eaten Enemy. "
+
+        # pos_diff = abs(request.player.x - request.enemy.x)
+        # moving_towards_enemy = (
+        #     request.player.vx > 0 and request.player.x < request.enemy.x
+        # ) or (request.player.vx < 0 and request.player.x > request.enemy.x)
+
+        # if request.power_ticks > 0:
+        #     # reward += 0.1
+        #     self.power_up_enemy_away_counter += 1
+            # desc += "PowerUp Reward. "
+
+            # if moving_towards_enemy:
+            #     reward += 1
+            #     self.power_up_enemy_close_counter += 1
+            #     desc += "Moving Towards Enemy. "
+            # else:
+            #     reward -= 0.1
+            #     self.power_up_enemy_away_counter += 1
+            #     desc += "Moving Away from Enemy. "
+        
+        # else:
+        #     if pos_diff < 15 and moving_towards_enemy:
+        #         reward -= 1
+        #         self.enemy_close_counter += 1
+        #         desc += "Enemy Close. "
+            # else:
+            #     reward += 0.001
+            #     self.enemy_away_counter += 1
+            #     desc += "Enemy Away. "
+
+        # if len(self.action_tracker) > 10 and self.action_tracker[-5:] == "00000":
+        #     reward -= 0.5
+        #     self.player_switching += 1
+        #     desc += "Player Keeps Switching. "
+
+        # if reward == 0:
+        #     self.did_not_thing += 1
+        #     desc += "Did nothing"
 
         # if request.power_ticks > 0 and moving_towards_enemy:
 
@@ -297,7 +340,7 @@ class PakuPakuEnv(gym.Env):
 
         self.previous_score = request.score
         self.reward_tracker += reward
-        self.action_tracker += str(action)
+        self.action_tracker.append(action.item())
         self.score_tracker.append(score_diff)
         self.counter += 1
         info = {
@@ -333,6 +376,7 @@ class PakuPakuEnv(gym.Env):
             # self.logger.add_text("xgame/desc", desc)
 
             print(json.dumps(info, indent=4))
+            print(self.action_tracker)
             terminated = True
             done = False
 
