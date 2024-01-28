@@ -5,7 +5,7 @@ from stable_baselines3.common.vec_env import VecNormalize
 from stable_baselines3.common.env_util import make_vec_env
 
 # from PakuPakuEnv import PakuPakuEnv
-from PakuPakuEnv import PakuPakuEnv
+from PakuPakuEnv2 import PakuPakuEnv
 from pathlib import Path
 
 
@@ -36,11 +36,11 @@ class EvalCallback(BaseCallback):
 
 
 def train():
-    model_name = f"ppo"
-    TOTAL_TIMESTEPS = 500_000
+    model_name = f"ppo1"
+    TOTAL_TIMESTEPS = 10_000
     env = PakuPakuEnv
-    vec_env = make_vec_env(env, env_kwargs={"port": 8000})
-    ENT_COEF = 0.05
+    vec_env = make_vec_env(env, n_envs=1)
+    ENT_COEF = 0.001
     N_EPOCHS = 20
     N_STEPS = 128
     BATCH_SIZE = 128
@@ -58,7 +58,7 @@ def train():
             n_epochs=N_EPOCHS,
             n_steps=N_STEPS,
             batch_size=BATCH_SIZE,
-            clip_range_vf=CLIP_RANGE_VF,
+            # clip_range_vf=CLIP_RANGE_VF,
             # normalize_advantage=False,
             verbose=0,
             # use_sde=True,
@@ -76,14 +76,14 @@ def train():
             ent_coef=ENT_COEF,
             n_epochs=N_EPOCHS,
             batch_size=BATCH_SIZE,
-            clip_range_vf=CLIP_RANGE_VF,
+            # clip_range_vf=CLIP_RANGE_VF,
             # normalize_advantage=False,
             tensorboard_log="tensorboard_log",
             # use_sde=True,
             # sde_sample_freq=4,
-            policy_kwargs=dict(
-                net_arch=dict(pi=[1024, 2048, 1024], vf=[1024, 2048, 1024])
-            ),
+            # policy_kwargs=dict(
+            #     net_arch=dict(pi=[1024, 2048, 1024], vf=[1024, 2048, 1024])
+            # ),
         )
 
     try:

@@ -6,69 +6,69 @@ description = `
 
 characters = [
   `
-    llll
-   lll
-  lll
-  lll
-   lll
-    llll
-  `,
-  `
-    lll
-   lllll
-  lll
-  lll
-   lllll
-    lll
-  `,
-  `
-    ll
-   llll
-  llllll
-  llllll
-   llll
-    ll
-  `,
-  `
-    lll
-   l l l
-   llll
-   llll
   llll
-  l l l
-  `,
+ lll
+lll
+lll
+ lll
+  llll
+`,
   `
-    lll
-   l l l
-   llll
-   llll
-   llll
-   l l
-  `,
+  lll
+ lllll
+lll
+lll
+ lllll
+  lll
+`,
   `
   ll
+ llll
+llllll
+llllll
+ llll
   ll
-  `,
+`,
   `
-   ll
-  llll
-  llll
-   ll
-  `,
+  lll
+ l l l
+ llll
+ llll
+llll
+l l l
+`,
   `
-    l l
-  
-  
-  
-  `,
+  lll
+ l l l
+ llll
+ llll
+ llll
+ l l
+`,
+  `
+ll
+ll
+`,
+  `
+ ll
+llll
+llll
+ ll
+`,
+  `
+  l l
+
+
+
+`,
 ];
 
 options = {
   theme: "dark",
   viewSize: { x: 100, y: 50 },
-  isPlayingBgm: false,
-  isReplayEnabled: false,
-  seed: 20,
+  isPlayingBgm: true,
+  isReplayEnabled: true,
+  seed: 9,
 };
 
 /** @type {{x: number, vx: number}} */
@@ -80,66 +80,30 @@ let dots;
 let powerTicks;
 let animTicks;
 let multiplier;
-let isGamePaused = false;
 let gameEnded = false;
 
-
-
-
-function send_screenshot(evx) {
-  isGamePaused = true; // Pause the game when the request is made
-  const screenshotData = document.getElementsByTagName('canvas')[0].toDataURL('image/png');
-
-  fetch('http://localhost:8000/upload-screenshot', {
-    method: 'POST',
-    body: JSON.stringify({
-      screenshot: screenshotData,
-      score: score,
-      player: player,
-      enemy: {x: enemy.x, vx: evx},
-      game_ended: gameEnded,
-      power_ticks: powerTicks,
-      dots: dots,
-      // evx: evx,
-      // player_position: player.x,
-      // enemy_position: enemy.x,
-      // player_vx: player.vx,
-    }),
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  })
-  .then(response => response.json())
-  .then(data => {
-    // Handle response here
-    // console.log(data);
-    if (data.action == 0) {
-      player.vx *= -1;
-    }
-    isGamePaused = false; // Resume the game after handling the response
-  })
-  .catch(error => {
-    // console.error('Error:', error);
-    isGamePaused = false; // Resume the game even if there's an error
-  });
-}
-
-
 function update() {
+
   if (!ticks) {
-    // console.log("starting here")
+    gameEnded = false;
     player = { x: 40, vx: 1 };
     enemy = { x: 100, eyeVx: 0 };
     multiplier = 0;
     addDots();
     powerTicks = animTicks = 0;
   }
-  if (isGamePaused) {
-    return; // Exit the function early if the game is paused
+
+  if (!input.isJustPressed) {
+    return;
   }
+
   animTicks += difficulty;
   color("black");
   text(`x${multiplier}`, 3, 9);
+  // if (input.isJustPressed) {
+  if (keyboard.code.Digit1.isJustPressed) {
+    player.vx *= -1;
+  }
   player.x += player.vx * 0.5 * difficulty;
   if (player.x < -3) {
     player.x = 103;
@@ -164,12 +128,12 @@ function update() {
     const c = char(d.isPower ? "g" : "f", d.x, 30).isColliding.char;
     if (c.a || c.b || c.c) {
       if (d.isPower) {
-        // play("jump");
+        play("jump");
         if (enemy.eyeVx === 0) {
           powerTicks = 120;
         }
       } else {
-        // play("hit");
+        play("hit");
       }
       addScore(multiplier);
       return true;
@@ -181,24 +145,23 @@ function update() {
       : (player.x > enemy.x ? 1 : -1) * (powerTicks > 0 ? -1 : 1);
   enemy.x = clamp(
     enemy.x +
-      evx *
-        (powerTicks > 0 ? 0.25 : enemy.eyeVx !== 0 ? 0.75 : 0.55) *
-        difficulty,
+    evx *
+    (powerTicks > 0 ? 0.25 : enemy.eyeVx !== 0 ? 0.75 : 0.55) *
+    difficulty,
     0,
     100
   );
   if ((enemy.eyeVx < 0 && enemy.x < 1) || (enemy.eyeVx > 0 && enemy.x > 99)) {
     enemy.eyeVx = 0;
   }
-
   color(
     powerTicks > 0
       ? powerTicks < 30 && powerTicks % 10 < 5
         ? "black"
         : "blue"
       : enemy.eyeVx !== 0
-      ? "black"
-      : "red"
+        ? "black"
+        : "red"
   );
   const c = char(
     enemy.eyeVx !== 0 ? "h" : addWithCharCode("d", floor(animTicks / 7) % 2),
@@ -211,27 +174,34 @@ function update() {
   ).isColliding.char;
   if (enemy.eyeVx === 0 && (c.a || c.b || c.c)) {
     if (powerTicks > 0) {
-      // play("powerUp");
+      play("powerUp");
       addScore(10 * multiplier, enemy.x, 30);
       enemy.eyeVx = player.x > 50 ? -1 : 1;
       powerTicks = 0;
       multiplier++;
     } else {
-      // play("explosion");
+      play("explosion");
       end();
       gameEnded = true;
     }
   }
   powerTicks -= difficulty;
   if (dots.length === 0) {
-    // play("coin");
+    play("coin");
     addDots();
   }
 
-  send_screenshot(evx);
+  const body = {
+    screenshot: document.getElementsByTagName('canvas')[0].toDataURL('image/png'),
+    score: score,
+    player: player,
+    enemy: {x: enemy.x, vx: evx},
+    game_ended: gameEnded,
+    power_ticks: powerTicks,
+    dots: dots,
+  }
+  console.debug(JSON.stringify(body))
 }
-
-
 
 function addDots() {
   let pi = player.x > 50 ? rndi(1, 6) : rndi(10, 15);

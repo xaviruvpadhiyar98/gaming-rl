@@ -180,11 +180,10 @@ class PakuPakuEnv(gym.Env):
         terminated = False
         done = False
         reward = 0
-        desc = ""
+        desc = "|"
 
         # action = np.round(action).astype(int).item()
         self.action = action.item()
-        # print(self.action)
         self.action_event.set()
         # logger.info(f"{self.action_event.is_set()=} {self.action=}")
 
@@ -199,20 +198,48 @@ class PakuPakuEnv(gym.Env):
         # logger.info((request.player_position, request.enemy_position, request.score, request.game_ended))
 
         score_diff = request.score - self.previous_score
+        if score_diff > 0:
+            reward += score_diff
+            self.eaten_enemy += 1
+            desc += "Scored|"
+
+        if len(self.action_tracker) > 10 and self.action_tracker[-4:] == [0,0,0,0]:
+            reward -= 0.5
+            self.player_switching += 1
+            desc += "Switching|"
+        
+        if score_diff == 0:
+            reward += 0.001
+            self.did_not_thing += 1
+            desc += "LowReward|"
+
+
+
+
+
+
+        # else:
+
+
+            
         # pos_diff = abs(request.player.x - request.enemy.x)
         # moving_towards_enemy = (
         #     request.player.vx > 0 and request.player.x < request.enemy.x
         # ) or (request.player.vx < 0 and request.player.x > request.enemy.x)
 
-        if score_diff > 0:
-            reward += 1
-            self.eaten_enemy += 1
-            desc += "Done Something. "
+        # if score_diff > 0:
+        #     reward += 1
+        #     self.eaten_enemy += 1
+        #     desc += "Done Something. "
 
-        if len(self.action_tracker) > 10 and self.action_tracker[-5:] == [0,0,0,0,0]:
-            reward -= 0.5
-            self.player_switching += 1
-            desc += "Player Keeps Switching. "
+        # if len(self.action_tracker) > 10 and self.action_tracker[-5:] == [0,0,0,0,0]:
+        #     reward -= 0.5
+        #     self.player_switching += 1
+        #     desc += "Player Keeps Switching. "
+        
+        # if reward == 0:
+        #     reward -= 0.005
+        #     desc += "Done Nothing. "
         
         # if request.power_ticks > 0:
         #     if moving_towards_enemy:
@@ -364,8 +391,13 @@ class PakuPakuEnv(gym.Env):
         # print(info)
         if request.game_ended:
             reward -= 10
+            self.reward_tracker += reward
+            info["reward"] = reward
+            info["reward_tracker"] = self.reward_tracker
             common_res = Counter(self.action_tracker).most_common(2)
             for c in common_res:
+                if c[0] == 0:
+                    info[f"Switching %"] = (c[1]/len(self.action_tracker))*100
                 info[c[0]] = c[1]
 
             # self.logger.add_scalar("xgame/reward", reward)
@@ -380,7 +412,7 @@ class PakuPakuEnv(gym.Env):
             terminated = True
             done = False
 
-        reward = max(min(reward, 1), -1)
+        # reward = max(min(reward, 1), -1)
 
         return obs, reward, terminated, done, info
 
