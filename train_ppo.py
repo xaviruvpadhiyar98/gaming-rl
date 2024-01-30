@@ -50,10 +50,10 @@ class EvalCallback(BaseCallback):
 
 def train():
     model_name = f"ppo_no_reward_cap"
-    TOTAL_TIMESTEPS = 500_000
+    TOTAL_TIMESTEPS = 200_000
     env = PakuPakuEnv
-    vec_env = make_vec_env(env, n_envs=4, vec_env_cls=SubprocVecEnv)
-    ENT_COEF = 0.001
+    vec_env = make_vec_env(env, n_envs=8, vec_env_cls=SubprocVecEnv)
+    ENT_COEF = 0.01
     N_EPOCHS = 20
     N_STEPS = 128
     BATCH_SIZE = 128
