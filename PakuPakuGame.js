@@ -101,7 +101,7 @@ function update() {
   color("black");
   text(`x${multiplier}`, 3, 9);
   // if (input.isJustPressed) {
-  if (keyboard.code.Digit1.isJustPressed) {
+  if (keyboard.code.Digit0.isJustPressed) {
     player.vx *= -1;
   }
   player.x += player.vx * 0.5 * difficulty;
