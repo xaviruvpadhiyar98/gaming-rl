@@ -1,12 +1,25 @@
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.env_checker import check_env
-from stable_baselines3.common.vec_env import VecNormalize
+from stable_baselines3.common.vec_env import VecNormalize, SubprocVecEnv
 from stable_baselines3.common.env_util import make_vec_env
 
 # from PakuPakuEnv import PakuPakuEnv
 from PakuPakuEnv2 import PakuPakuEnv
 from pathlib import Path
+import os
+import random
+
+import torch
+
+SEED = 1337
+random.seed(SEED)
+os.environ["PYTHONHASHSEED"] = str(SEED)
+torch.manual_seed(SEED)
+torch.cuda.manual_seed(SEED)
+torch.cuda.manual_seed_all(SEED)  # if you are using multi-GPU.
+torch.backends.cudnn.benchmark = False
+torch.backends.cudnn.deterministic = True
 
 
 class EvalCallback(BaseCallback):
@@ -36,10 +49,10 @@ class EvalCallback(BaseCallback):
 
 
 def train():
-    model_name = f"ppo1"
-    TOTAL_TIMESTEPS = 10_000
+    model_name = f"ppo_no_reward_cap"
+    TOTAL_TIMESTEPS = 500_000
     env = PakuPakuEnv
-    vec_env = make_vec_env(env, n_envs=1)
+    vec_env = make_vec_env(env, n_envs=4, vec_env_cls=SubprocVecEnv)
     ENT_COEF = 0.001
     N_EPOCHS = 20
     N_STEPS = 128

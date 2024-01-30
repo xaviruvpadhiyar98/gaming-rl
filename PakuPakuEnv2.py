@@ -46,9 +46,9 @@ class PakuPakuEnv(gym.Env):
             Path.home() / "Softwares/thorium-browser_117.0.5938.157_amd64/thorium"
         ).as_posix()
         # options.add_argument("--auto-open-devtools-for-tabs")
-        options.add_argument("--disable-gpu")
-        options.add_argument('--disable-dev-shm-usage')
-        # options.add_argument("--headless")
+        # options.add_argument("--disable-gpu")
+        # options.add_argument('--disable-dev-shm-usage')
+        options.add_argument("--headless")
         options.add_argument("--disable-infobars")
         options.add_argument("--no-sandbox")
         options.add_argument("--window-size=250,250")
@@ -103,6 +103,8 @@ class PakuPakuEnv(gym.Env):
         self.eaten_enemy = 0
         self.player_switching = 0
         self.did_not_thing = 0
+        self.power_up_counter = 0
+        self.switching_action = 0
         return obs, {}
 
     def step(self, action):
@@ -123,7 +125,7 @@ class PakuPakuEnv(gym.Env):
             self.eaten_enemy += 1
             desc += "Scored|"
 
-        if len(self.action_tracker) > 10 and self.action_tracker[-4:] == [1,1,1,1]:
+        if len(self.action_tracker) > 10 and self.action_tracker[-4:] == [self.switching_action] * 4:
             reward -= 0.8
             self.player_switching += 1
             desc += "Switching|"
@@ -139,19 +141,26 @@ class PakuPakuEnv(gym.Env):
 
 
         pos_diff = abs(log['player']['x'] - log['enemy']['x'])
-        if pos_diff < 15 and moving_towards_enemy and log['power_ticks'] < 1:
+        if pos_diff < 14 and moving_towards_enemy and log['power_ticks'] < 1:
             reward -= 1
             self.enemy_close_counter += 1
             desc += "MovingTowardEnemy|"
 
-        if action == 1:
-            reward -= 0.5
+        if action == self.switching_action:
+            reward -= 0.50
             desc += "LowSwitchReward|"
 
+        dots = log["dots"]
+        if len(dots) != len(self.previous_dots):
+            self.dots_eaten += 1
+            self.previous_dots = dots
+        
+        if log['power_ticks'] > 0:
+            self.power_up_counter += 1
 
 
 
-        reward = max(min(reward, 1), -1)
+        # reward = max(min(reward, 1), -1)
         self.previous_score = log['score']
         self.reward_tracker += reward
         self.action_tracker.append(action)
@@ -174,7 +183,8 @@ class PakuPakuEnv(gym.Env):
             "player_switching": self.player_switching,
             "did_not_thing": self.did_not_thing,
             "desc": desc,
-            "moving_towards_enemy": moving_towards_enemy
+            "moving_towards_enemy": moving_towards_enemy,
+            "power_up_counter": self.power_up_counter,
         }
         # print(info)
         if log['game_ended']:
@@ -184,7 +194,7 @@ class PakuPakuEnv(gym.Env):
             # info["reward_tracker"] = self.reward_tracker
             common_res = Counter(self.action_tracker).most_common(2)
             for c in common_res:
-                if c[0] == 1:
+                if c[0] == self.switching_action:
                     info[f"Switching %"] = (c[1]/len(self.action_tracker))*100
                 info[c[0]] = c[1]
 
