@@ -36,8 +36,11 @@ class PakuPakuEnv(gym.Env):
         super(PakuPakuEnv, self).__init__()
         self.action_space = Discrete(2)
         # self.action_space = Box(low=0, high=1, shape=(1,), dtype=np.float16)
+        # self.observation_space = Box(
+        #     low=0, high=255, shape=(50, 100, 4), dtype=np.uint8
+        # )
         self.observation_space = Box(
-            low=0, high=255, shape=(50, 100, 4), dtype=np.uint8
+            low=0, high=255, shape=(50, 100, 4), dtype=np.int32
         )
 
         # Selenium
@@ -48,7 +51,7 @@ class PakuPakuEnv(gym.Env):
         # options.add_argument("--auto-open-devtools-for-tabs")
         # options.add_argument("--disable-gpu")
         # options.add_argument('--disable-dev-shm-usage')
-        options.add_argument("--headless")
+        # options.add_argument("--headless")
         options.add_argument("--disable-infobars")
         options.add_argument("--no-sandbox")
         options.add_argument("--window-size=250,250")
@@ -75,7 +78,13 @@ class PakuPakuEnv(gym.Env):
         while not logs:
             self.driver.find_element(By.TAG_NAME, 'canvas').click()
             logs = self.driver.get_log('browser')
-        log = literal_eval(logs[-1]['message'].replace("http://localhost:4000/pakupaku/main.js 202:10 ", ''))
+        
+        log = logs[-1]['message']
+        # print(log)
+        log = log.replace("http://localhost:4000/pakupaku/main.js 109:10 ", '')
+        log = log.replace("http://localhost:4000/pakupaku/main.js 207:14 ", '')
+        log = literal_eval(log)
+        # log = literal_eval(logs[-1]['message'].replace("http://localhost:4000/pakupaku/main.js 109:10 ", ''))
         log = json.loads(log)
         return log
 
@@ -83,16 +92,12 @@ class PakuPakuEnv(gym.Env):
 
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
-        self.driver.find_element(By.TAG_NAME, 'canvas').click()
-        log = self.get_browser_log()
-        # print(log)
-        obs = self.get_obs(log)
-        self.previous_score = log["score"]
-        self.previous_dots = log["dots"]
+        self.previous_score = 0
+        self.previous_dots = [{"x":11,"isPower":False}]*16
         self.reward_tracker = 0
         self.action_tracker = []
-        self.score_tracker = [log["score"]]
-        self.previous_player_position = log["player"]['x']
+        self.score_tracker = [self.previous_score]
+        self.previous_player_position = 40
         self.counter = 0
         self.enemy_close_counter = 0
         self.enemy_away_counter = 0
@@ -105,6 +110,9 @@ class PakuPakuEnv(gym.Env):
         self.did_not_thing = 0
         self.power_up_counter = 0
         self.switching_action = 0
+        self.driver.find_element(By.TAG_NAME, 'canvas').click()
+        self.log = self.get_browser_log()
+        obs = self.get_obs(self.log)
         return obs, {}
 
     def step(self, action):
@@ -115,57 +123,61 @@ class PakuPakuEnv(gym.Env):
 
         action = action.item()
         
-        ActionChains(self.driver).send_keys(action).perform()
-        log = self.get_browser_log()
-        obs = self.get_obs(log)
-
+        log = self.log
+        dots = log["dots"]
         score_diff = log['score'] - self.previous_score
-        if score_diff > 0:
-            reward += score_diff
-            self.eaten_enemy += 1
-            desc += "Scored|"
-
-        if len(self.action_tracker) > 10 and self.action_tracker[-4:] == [self.switching_action] * 4:
-            reward -= 0.8
-            self.player_switching += 1
-            desc += "Switching|"
-        
-        if score_diff == 0:
-            reward += 0.01
-            self.did_not_thing += 1
-            desc += "LowReward|"
-
         moving_towards_enemy = (
             log["player"]["vx"] > 0 and log["player"]["x"] < log["enemy"]["x"]
         ) or (log["player"]["vx"] < 0 and log["player"]["x"] > log["enemy"]["x"])
-
-
         pos_diff = abs(log['player']['x'] - log['enemy']['x'])
-        if pos_diff < 14 and moving_towards_enemy and log['power_ticks'] < 1:
+
+
+
+        if len(dots) != len(self.previous_dots):
+            reward += 0.5
+            self.dots_eaten += 1
+            self.previous_dots = dots
+            desc += "DotsEaten|"
+        
+        if log['power_ticks'] > 0 and moving_towards_enemy and pos_diff < 20:
+            reward += 2
+            self.power_up_counter += 1
+            desc += "InPowerMode|" 
+        
+        if log['power_ticks'] > 0 and not moving_towards_enemy and pos_diff < 20:
+            reward -= 0.5
+            self.power_up_counter += 1
+            desc += "InPowerMode|" 
+
+        if score_diff > 1:
+            reward += score_diff
+            self.eaten_enemy += 1
+            desc += "EnemyEaten|"
+
+        if len(self.action_tracker) > 10 and self.action_tracker[-4:] == [self.switching_action] * 4:
+            reward -= 0.5
+            self.player_switching += 1
+            desc += "Switching|"
+        
+        if pos_diff < 11 and moving_towards_enemy and log['power_ticks'] <= 0:
             reward -= 1
             self.enemy_close_counter += 1
             desc += "MovingTowardEnemy|"
 
         if action == self.switching_action:
-            reward -= 0.50
-            desc += "LowSwitchReward|"
+            reward -= 0.5
+            desc += "NegativeSwitchReward|"
 
-        dots = log["dots"]
-        if len(dots) != len(self.previous_dots):
-            self.dots_eaten += 1
-            self.previous_dots = dots
-        
-        if log['power_ticks'] > 0:
-            self.power_up_counter += 1
+        if action != self.switching_action:
+            reward += 0.01
+            desc += "NegativeSwitchReward|"
 
 
-
-        # reward = max(min(reward, 1), -1)
+        reward = max(min(reward, 1), -1)
         self.previous_score = log['score']
         self.reward_tracker += reward
         self.action_tracker.append(action)
         self.score_tracker.append(score_diff)
-        self.counter += 1
         info = {
             "reward": reward,
             "reward_tracker": self.reward_tracker,
@@ -186,12 +198,8 @@ class PakuPakuEnv(gym.Env):
             "moving_towards_enemy": moving_towards_enemy,
             "power_up_counter": self.power_up_counter,
         }
-        # print(info)
+
         if log['game_ended']:
-            # reward -= 10
-            # self.reward_tracker += reward
-            # info["reward"] = reward
-            # info["reward_tracker"] = self.reward_tracker
             common_res = Counter(self.action_tracker).most_common(2)
             for c in common_res:
                 if c[0] == self.switching_action:
@@ -203,8 +211,10 @@ class PakuPakuEnv(gym.Env):
             terminated = True
             done = False
 
-        
-
+        self.counter += 1
+        ActionChains(self.driver).send_keys(action).perform()
+        self.log = self.get_browser_log()
+        obs = self.get_obs(self.log)
         return obs, reward, terminated, done, info
 
     def close(self):
@@ -221,7 +231,7 @@ def main():
         env.reset()
         # break
         for r in range(5000):
-            action = np.array([int(input("0 for same path, 1 to change direction>> "))])
+            action = np.array([int(input("1 for same path, 0 to change direction>> "))])
             # action = SystemRandom().choice(np.array([0, 1], dtype=np.int16))
             observation, reward, terminated, done, info = env.step(action)
             print(json.dumps(info, indent=4))

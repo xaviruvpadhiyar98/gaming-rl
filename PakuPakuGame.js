@@ -66,8 +66,8 @@ llll
 options = {
   theme: "dark",
   viewSize: { x: 100, y: 50 },
-  isPlayingBgm: true,
-  isReplayEnabled: true,
+  isPlayingBgm: false,
+  isReplayEnabled: false,
   seed: 9,
 };
 
@@ -81,6 +81,7 @@ let powerTicks;
 let animTicks;
 let multiplier;
 let gameEnded = false;
+let evx = 0;
 
 function update() {
 
@@ -96,6 +97,19 @@ function update() {
   if (!input.isJustPressed) {
     return;
   }
+
+  const body = {
+    screenshot: document.getElementsByTagName('canvas')[0].toDataURL('image/png'),
+    score: score,
+    player: player,
+    enemy: {x: enemy.x, vx: evx},
+    game_ended: gameEnded,
+    power_ticks: powerTicks,
+    dots: dots,
+  }
+  console.debug(JSON.stringify(body))
+
+
 
   animTicks += difficulty;
   color("black");
@@ -128,18 +142,18 @@ function update() {
     const c = char(d.isPower ? "g" : "f", d.x, 30).isColliding.char;
     if (c.a || c.b || c.c) {
       if (d.isPower) {
-        play("jump");
+        // play("jump");
         if (enemy.eyeVx === 0) {
           powerTicks = 120;
         }
       } else {
-        play("hit");
+        // play("hit");
       }
       addScore(multiplier);
       return true;
     }
   });
-  const evx =
+  evx =
     enemy.eyeVx !== 0
       ? enemy.eyeVx
       : (player.x > enemy.x ? 1 : -1) * (powerTicks > 0 ? -1 : 1);
@@ -174,33 +188,44 @@ function update() {
   ).isColliding.char;
   if (enemy.eyeVx === 0 && (c.a || c.b || c.c)) {
     if (powerTicks > 0) {
-      play("powerUp");
+      // play("powerUp");
       addScore(10 * multiplier, enemy.x, 30);
       enemy.eyeVx = player.x > 50 ? -1 : 1;
       powerTicks = 0;
       multiplier++;
     } else {
-      play("explosion");
-      end();
+      // play("explosion");
       gameEnded = true;
+      const body = {
+        screenshot: document.getElementsByTagName('canvas')[0].toDataURL('image/png'),
+        score: score,
+        player: player,
+        enemy: {x: enemy.x, vx: evx},
+        game_ended: gameEnded,
+        power_ticks: powerTicks,
+        dots: dots,
+      }
+      console.debug(JSON.stringify(body))
+      end();
     }
   }
   powerTicks -= difficulty;
   if (dots.length === 0) {
-    play("coin");
+    // play("coin");
     addDots();
   }
 
-  const body = {
-    screenshot: document.getElementsByTagName('canvas')[0].toDataURL('image/png'),
-    score: score,
-    player: player,
-    enemy: {x: enemy.x, vx: evx},
-    game_ended: gameEnded,
-    power_ticks: powerTicks,
-    dots: dots,
-  }
-  console.debug(JSON.stringify(body))
+  // const body = {
+  //   screenshot: document.getElementsByTagName('canvas')[0].toDataURL('image/png'),
+  //   score: score,
+  //   player: player,
+  //   enemy: {x: enemy.x, vx: evx},
+  //   game_ended: gameEnded,
+  //   power_ticks: powerTicks,
+  //   dots: dots,
+  // }
+  // console.debug(JSON.stringify(body))
+
 }
 
 function addDots() {
