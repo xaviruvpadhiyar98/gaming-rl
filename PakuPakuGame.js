@@ -98,16 +98,16 @@ function update() {
     return;
   }
 
-  const body = {
-    screenshot: document.getElementsByTagName('canvas')[0].toDataURL('image/png'),
-    score: score,
-    player: player,
-    enemy: {x: enemy.x, vx: evx},
-    game_ended: gameEnded,
-    power_ticks: powerTicks,
-    dots: dots,
-  }
-  console.debug(JSON.stringify(body))
+  // const body = {
+  //   screenshot: document.getElementsByTagName('canvas')[0].toDataURL('image/png'),
+  //   score: score,
+  //   player: player,
+  //   enemy: {x: enemy.x, vx: evx},
+  //   game_ended: gameEnded,
+  //   power_ticks: powerTicks,
+  //   dots: dots,
+  // }
+  // console.debug(JSON.stringify(body))
 
 
 
@@ -196,16 +196,16 @@ function update() {
     } else {
       // play("explosion");
       gameEnded = true;
-      const body = {
-        screenshot: document.getElementsByTagName('canvas')[0].toDataURL('image/png'),
-        score: score,
-        player: player,
-        enemy: {x: enemy.x, vx: evx},
-        game_ended: gameEnded,
-        power_ticks: powerTicks,
-        dots: dots,
-      }
-      console.debug(JSON.stringify(body))
+      // const body = {
+      //   screenshot: document.getElementsByTagName('canvas')[0].toDataURL('image/png'),
+      //   score: score,
+      //   player: player,
+      //   enemy: {x: enemy.x, vx: evx},
+      //   game_ended: gameEnded,
+      //   power_ticks: powerTicks,
+      //   dots: dots,
+      // }
+      // console.debug(JSON.stringify(body))
       end();
     }
   }
@@ -215,16 +215,16 @@ function update() {
     addDots();
   }
 
-  // const body = {
-  //   screenshot: document.getElementsByTagName('canvas')[0].toDataURL('image/png'),
-  //   score: score,
-  //   player: player,
-  //   enemy: {x: enemy.x, vx: evx},
-  //   game_ended: gameEnded,
-  //   power_ticks: powerTicks,
-  //   dots: dots,
-  // }
-  // console.debug(JSON.stringify(body))
+  const body = {
+    screenshot: document.getElementsByTagName('canvas')[0].toDataURL('image/png'),
+    score: score,
+    player: player,
+    enemy: {x: enemy.x, vx: evx},
+    game_ended: gameEnded,
+    power_ticks: powerTicks,
+    dots: dots,
+  }
+  console.debug(JSON.stringify(body))
 
 }
 

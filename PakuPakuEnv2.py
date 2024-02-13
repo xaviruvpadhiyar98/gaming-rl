@@ -19,6 +19,7 @@ from torch.utils.tensorboard import SummaryWriter
 import json
 from typing import Any, List
 from ast import literal_eval
+from datetime import datetime
 
 formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
 logging.basicConfig(
@@ -70,30 +71,45 @@ class PakuPakuEnv(gym.Env):
     def get_obs(self, record):
         b64_img = record['screenshot'].replace("data:image/png;base64,", "")
         # logger.info(b64_img)
-        img = Image.open(BytesIO(b64decode(b64_img)))
+        img_bytes = (b64decode(b64_img))
+        # current_datetime = str(int(datetime.utcnow().timestamp()*1000000))
+        # (Path("imgs") / f"{current_datetime}.png").write_bytes(img_bytes)
+        img = Image.open(BytesIO(img_bytes))
         return np.asarray(img)
 
-    def get_browser_log(self):
-        logs = self.driver.get_log('browser')
-        while not logs:
+    def get_browser_log(self, reset=False):
+        if reset:
+            sleep(0.01)
+            # print("reseted the env")
             self.driver.find_element(By.TAG_NAME, 'canvas').click()
+        logs = self.driver.get_log('browser')
+        c = 0
+        while not logs:
+            # print(f"{c} logs not found sleeping...")
+            sleep(0.001)
             logs = self.driver.get_log('browser')
-        
+            c += 1
+            if c % 10 == 0:
+                self.driver.find_element(By.TAG_NAME, 'canvas').click()
+                logs = self.driver.get_log('browser')
+
         log = logs[-1]['message']
         # print(log)
         log = log.replace("http://localhost:4000/pakupaku/main.js 109:10 ", '')
         log = log.replace("http://localhost:4000/pakupaku/main.js 207:14 ", '')
+        log = log.replace("http://localhost:4000/pakupaku/main.js 226:10 ", '')
         log = literal_eval(log)
         # log = literal_eval(logs[-1]['message'].replace("http://localhost:4000/pakupaku/main.js 109:10 ", ''))
         log = json.loads(log)
+        # print(json.dumps(log, indent=4), len(log['dots']))
         return log
 
 
 
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
-        self.previous_score = 0
-        self.previous_dots = [{"x":11,"isPower":False}]*16
+        self.previous_score = 1
+        self.previous_dots = [{"x":11,"isPower":False}]*15
         self.reward_tracker = 0
         self.action_tracker = []
         self.score_tracker = [self.previous_score]
@@ -110,10 +126,15 @@ class PakuPakuEnv(gym.Env):
         self.did_not_thing = 0
         self.power_up_counter = 0
         self.switching_action = 0
-        self.driver.find_element(By.TAG_NAME, 'canvas').click()
-        self.log = self.get_browser_log()
-        obs = self.get_obs(self.log)
-        return obs, {}
+        self.last_counter_when_dot_eaten = 0
+        self.moving_towards_enemy = 0
+        self.moving_against_enemy = 0
+        self.enemy_close = 0
+
+        self.log = self.get_browser_log(reset=True)
+
+        self.obs = self.get_obs(self.log)
+        return self.obs, {}
 
     def step(self, action):
         terminated = False
@@ -132,48 +153,76 @@ class PakuPakuEnv(gym.Env):
         pos_diff = abs(log['player']['x'] - log['enemy']['x'])
 
 
+        if moving_towards_enemy:
+            desc += "MovingTowardsEnemy|"
+            self.moving_towards_enemy += 1
+
+            if pos_diff < 20:
+                desc += "EnemyClose|"
+                self.enemy_close += 1
+                if log['power_ticks'] > 0:
+                    desc += "InPowerMode|"
+                    reward += 1
+                else:
+                    desc += "InDangerMode|"
+                    reward -= 1
+            else:
+                desc += "EnemyFar|"
+                if log['power_ticks'] > 0:
+                    desc += "InPowerMode|"
+                    reward += 0.2
+                else:
+                    desc += "InDangerMode|"
+                    reward -= 0.01
+        else:
+            desc += "MovingAgainstEnemy|"
+            self.moving_against_enemy += 1
+            if pos_diff < 20:
+                desc += "EnemyClose|"
+                self.enemy_close += 1
+                if log['power_ticks'] > 0:
+                    desc += "InPowerMode|"
+                    reward -= 10
+                else:
+                    desc += "InDangerMode|"
+                    reward += 0.1
+            else:
+                desc += "EnemyFar|"
+                if log['power_ticks'] > 0:
+                    desc += "InPowerMode|"
+                    reward -= 1
+                else:
+                    desc += "InDangerMode|"
+                    reward += 0.1
+
 
         if len(dots) != len(self.previous_dots):
-            reward += 0.5
+            reward += 1
             self.dots_eaten += 1
             self.previous_dots = dots
+            self.last_counter_when_dot_eaten = self.counter
             desc += "DotsEaten|"
-        
-        if log['power_ticks'] > 0 and moving_towards_enemy and pos_diff < 20:
-            reward += 2
-            self.power_up_counter += 1
-            desc += "InPowerMode|" 
-        
-        if log['power_ticks'] > 0 and not moving_towards_enemy and pos_diff < 20:
-            reward -= 0.5
-            self.power_up_counter += 1
-            desc += "InPowerMode|" 
 
         if score_diff > 1:
             reward += score_diff
             self.eaten_enemy += 1
+            self.last_counter_when_dot_eaten = self.counter
             desc += "EnemyEaten|"
 
+
         if len(self.action_tracker) > 10 and self.action_tracker[-4:] == [self.switching_action] * 4:
-            reward -= 0.5
-            self.player_switching += 1
-            desc += "Switching|"
-        
-        if pos_diff < 11 and moving_towards_enemy and log['power_ticks'] <= 0:
             reward -= 1
-            self.enemy_close_counter += 1
-            desc += "MovingTowardEnemy|"
+            self.player_switching += 1
+            desc += "KeepsSwitching|"
+        
+        if self.counter - self.last_counter_when_dot_eaten > 100:
+            reward -= 1
+            desc += "KeepsAvoidingEnemy"
 
         if action == self.switching_action:
-            reward -= 0.5
-            desc += "NegativeSwitchReward|"
+            reward -= 0.85
+            desc += "SwitchingNegativeReward"
 
-        if action != self.switching_action:
-            reward += 0.01
-            desc += "NegativeSwitchReward|"
-
-
-        reward = max(min(reward, 1), -1)
         self.previous_score = log['score']
         self.reward_tracker += reward
         self.action_tracker.append(action)
@@ -198,6 +247,14 @@ class PakuPakuEnv(gym.Env):
             "moving_towards_enemy": moving_towards_enemy,
             "power_up_counter": self.power_up_counter,
         }
+        # if log['power_ticks'] > 0:
+        # current_datetime = str(int(datetime.utcnow().timestamp()*1000000))
+        # filename = Path("imgs") / f"{current_datetime}-{desc}-{reward:.2f}.png"
+        # Image.fromarray(self.obs).save(fp=filename, save_all=True, bitmap_format='png', )
+
+
+        reward = max(min(reward, 1), -1)
+        # print(log['game_ended'])
 
         if log['game_ended']:
             common_res = Counter(self.action_tracker).most_common(2)
@@ -206,16 +263,17 @@ class PakuPakuEnv(gym.Env):
                     info[f"Switching %"] = (c[1]/len(self.action_tracker))*100
                 info[c[0]] = c[1]
 
-
-            print(json.dumps(info, indent=4))
+            if log['score'] > 5:
+                print(json.dumps(info, indent=4))
             terminated = True
             done = False
+            return self.obs, reward, terminated, done, info
 
         self.counter += 1
         ActionChains(self.driver).send_keys(action).perform()
         self.log = self.get_browser_log()
-        obs = self.get_obs(self.log)
-        return obs, reward, terminated, done, info
+        self.obs = self.get_obs(self.log)
+        return self.obs, reward, terminated, done, info
 
     def close(self):
         self.driver.quit()
@@ -227,14 +285,14 @@ class PakuPakuEnv(gym.Env):
 
 def main():
     env = PakuPakuEnv()
-    for _ in range(1):
+    for _ in range(2):
         env.reset()
         # break
         for r in range(5000):
-            action = np.array([int(input("1 for same path, 0 to change direction>> "))])
-            # action = SystemRandom().choice(np.array([0, 1], dtype=np.int16))
+            # action = np.array([int(input("1 for same path, 0 to change direction>> "))])
+            action = SystemRandom().choice(np.array([0, 1], dtype=np.int16))
             observation, reward, terminated, done, info = env.step(action)
-            print(json.dumps(info, indent=4))
+            print(json.dumps(info, indent=4), done, terminated)
             if done or terminated:
                 break
     sleep(10)

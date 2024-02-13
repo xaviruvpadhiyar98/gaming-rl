@@ -29,13 +29,15 @@ torch.backends.cudnn.deterministic = True
 def test():
     model_name = f"ppo_reward_cap_vec_stack"
     env = PakuPakuEnv
-    vec_env = VecFrameStack(VecNormalize(make_vec_env(env, n_envs=1, vec_env_cls=SubprocVecEnv)), n_stack=4, channels_order='last')
+    vec_env = VecFrameStack(VecNormalize(make_vec_env(env, n_envs=1, vec_env_cls=SubprocVecEnv)), n_stack=6, channels_order='last')
     model = PPO.load(f"trained_models/{model_name}.zip", vec_env, )
     obs = vec_env.reset()
     states = None
     deterministic = True
     episode_starts = np.ones((1,), dtype=bool)
     while True:
+        # input("Press enter to continue")
+        
         actions, states = model.predict(
             obs,
             state=states,
@@ -43,9 +45,11 @@ def test():
             deterministic=deterministic,
         )
         obs, rewards, dones, infos = vec_env.step(actions)
+        
         episode_starts[0] = dones[0]
-        print(infos[0]["score"], infos[0]["desc"], infos[0]["game_ended"])
-        print()
+        print(infos[0]["score"], infos[0]["desc"], infos[0]["game_ended"], infos[0]['reward'])
+        print(infos[0])
+        
         if dones[0]:
             break
 

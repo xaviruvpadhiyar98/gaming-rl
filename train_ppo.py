@@ -106,19 +106,24 @@ class CustomCNN(BaseFeaturesExtractor):
         # Pass the CNN's output through the linear layer
         return self.linear(cnn_output)
 
+def linear_schedule(initial_value: float):
+    def func(progress_remaining: float) -> float:
+        return progress_remaining * initial_value
+    return func
 
 
 
 def train():
     model_name = f"ppo_reward_cap_vec_stack"
-    TOTAL_TIMESTEPS = 200_000
+    TOTAL_TIMESTEPS = 50_000
     env = PakuPakuEnv
-    vec_env = VecFrameStack(VecNormalize(make_vec_env(env, n_envs=4, vec_env_cls=SubprocVecEnv)), n_stack=4, channels_order='last')
-    ENT_COEF = 0.06
-    N_EPOCHS = 20
-    N_STEPS = 2048
-    BATCH_SIZE = 32
-    GAMMA = 0.98
+    vec_env = VecFrameStack(VecNormalize(make_vec_env(env, n_envs=2, vec_env_cls=SubprocVecEnv)), n_stack=6, channels_order='last')
+    ENT_COEF = 0.05
+    N_EPOCHS = 5
+    N_STEPS = 256
+    BATCH_SIZE = 8
+    GAMMA = 0.99
+    LEARNING_RATE = linear_schedule(0.0003)
     CLIP_RANGE_VF = 0.2
 
 
@@ -134,11 +139,18 @@ def train():
             n_steps=N_STEPS,
             batch_size=BATCH_SIZE,
             gamma=GAMMA,
+            learning_rate=LEARNING_RATE,
             # clip_range_vf=CLIP_RANGE_VF,
             # normalize_advantage=False,
             verbose=2,
             # use_sde=True,
             # sde_sample_freq=4,
+            # policy_kwargs=dict(
+            #     # net_arch=dict(pi=[1024, 2048, 1024], vf=[1024, 2048, 1024])
+            #     normalize_images=False,
+            #     features_extractor_class=CustomCNN,
+            #     features_extractor_kwargs=dict(features_dim=128),
+            # ),
         )
     else:
         reset_num_timesteps = True
@@ -153,13 +165,14 @@ def train():
             n_epochs=N_EPOCHS,
             batch_size=BATCH_SIZE,
             gamma=GAMMA,
+            learning_rate=LEARNING_RATE,
             # clip_range_vf=CLIP_RANGE_VF,
             # normalize_advantage=False,
             tensorboard_log="tensorboard_log",
             # use_sde=True,
             # sde_sample_freq=4,
             policy_kwargs=dict(
-                # net_arch=dict(pi=[1024, 2048, 1024], vf=[1024, 2048, 1024])
+                net_arch=dict(pi=[1024, 2048, 1024], vf=[1024, 2048, 1024]),
                 normalize_images=False,
                 features_extractor_class=CustomCNN,
                 features_extractor_kwargs=dict(features_dim=128),
